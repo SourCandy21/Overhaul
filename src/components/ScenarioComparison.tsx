@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { buildMockAnalysis } from '../api/mock'
 import { fetchSiteAnalysis, type SiteAnalysisRequest } from '../api/client'
 import type { SiteAnalysis } from '../types/analysis'
 
@@ -15,11 +14,14 @@ export interface ScenarioDraft {
 interface Scenario extends ScenarioDraft { id: number; name: string }
 interface ComparedScenario { scenario: Scenario; analysis: SiteAnalysis; sunlight: number; earthVisibility: number }
 
+function horizonElevation(observation: SiteAnalysis['observations'][number]) {
+  return observation.terrain?.available ? observation.terrain.horizon_elevation_deg : observation.geometric_horizon_elevation_deg ?? 0
+}
+
 function aboveHorizon(observation: SiteAnalysis['observations'][number], body: 'sun' | 'earth') {
   const position = observation[body]
   if (position.above_local_horizon !== undefined) return position.above_local_horizon
-  const terrain = observation.terrain?.available ? observation.terrain.horizon_elevation_deg : 0
-  return position.elevation_deg > terrain
+  return position.elevation_deg > horizonElevation(observation)
 }
 
 function estimateHours(analysis: SiteAnalysis, body: 'sun' | 'earth') {
@@ -29,8 +31,8 @@ function estimateHours(analysis: SiteAnalysis, body: 'sun' | 'earth') {
     const next = analysis.observations[index + 1]
     const elapsed = (Date.parse(next.time) - Date.parse(current.time)) / 3_600_000
     if (!Number.isFinite(elapsed) || elapsed <= 0) return hours
-    const firstMargin = current[body].elevation_deg - (current.terrain?.available ? current.terrain.horizon_elevation_deg : 0)
-    const nextMargin = next[body].elevation_deg - (next.terrain?.available ? next.terrain.horizon_elevation_deg : 0)
+    const firstMargin = current[body].elevation_deg - horizonElevation(current)
+    const nextMargin = next[body].elevation_deg - horizonElevation(next)
     const firstAbove = aboveHorizon(current, body)
     const nextAbove = aboveHorizon(next, body)
     if (firstAbove && nextAbove) return hours + elapsed
@@ -54,17 +56,18 @@ function buildRequest(scenario: Scenario): Omit<SiteAnalysisRequest, 'signal'> {
   }
 }
 
-function miniLine(analysis: SiteAnalysis, body: 'sun' | 'earth') {
+function miniLine(analysis: SiteAnalysis, body: 'sun' | 'earth' | 'horizon') {
   return analysis.observations.map((item, index) => {
     const x = analysis.observations.length < 2 ? 50 : index / (analysis.observations.length - 1) * 100
-    const elevation = Math.max(-10, Math.min(90, item[body].elevation_deg))
+    const sourceElevation = body === 'horizon' ? horizonElevation(item) : item[body].elevation_deg
+    const elevation = Math.max(-10, Math.min(90, sourceElevation))
     const y = 100 - (elevation + 10)
     return `${x},${y}`
   }).join(' ')
 }
 
 function MiniEphemeris({ analysis }: { analysis: SiteAnalysis }) {
-  return <div className="mini-ephemeris" role="img" aria-label="Elevação do Sol e da Terra durante o cenário"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1="90" y2="90" className="mini-horizon" /><polyline points={miniLine(analysis, 'sun')} className="mini-sun-line" /><polyline points={miniLine(analysis, 'earth')} className="mini-earth-line" /></svg><div><span><i className="mini-sun-swatch" />Sol</span><span><i className="mini-earth-swatch" />Terra</span></div></div>
+  return <div className="mini-ephemeris" role="img" aria-label="Elevação do Sol e da Terra em relação ao horizonte durante o cenário"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1="90" y2="90" className="mini-horizon" /><polyline points={miniLine(analysis, 'horizon')} className="mini-horizon-profile" /><polyline points={miniLine(analysis, 'sun')} className="mini-sun-line" /><polyline points={miniLine(analysis, 'earth')} className="mini-earth-line" /></svg><div><span><i className="mini-sun-swatch" />Sol</span><span><i className="mini-earth-swatch" />Terra</span></div></div>
 }
 
 export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDraft; apiConfigured: boolean }) {
@@ -72,7 +75,6 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
   const [results, setResults] = useState<ComparedScenario[]>([])
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const [source, setSource] = useState<'mock' | 'api' | null>(null)
 
   function addScenario() {
     if (scenarios.length >= 3) return
@@ -83,26 +85,21 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
     setMessage('')
   }
 
-  async function compare(useMock: boolean) {
+  async function compare() {
     setState('loading')
-    setSource(useMock ? 'mock' : 'api')
     setResults([])
     setMessage('')
     const compared: ComparedScenario[] = []
     try {
       for (const scenario of scenarios) {
         const request = buildRequest(scenario)
+        const controller = new AbortController()
+        const timeout = window.setTimeout(() => controller.abort(), 30_000)
         let analysis: SiteAnalysis
-        if (useMock) {
-          analysis = buildMockAnalysis(request)
-        } else {
-          const controller = new AbortController()
-          const timeout = window.setTimeout(() => controller.abort(), 30_000)
-          try {
-            analysis = await fetchSiteAnalysis({ ...request, signal: controller.signal })
-          } finally {
-            window.clearTimeout(timeout)
-          }
+        try {
+          analysis = await fetchSiteAnalysis({ ...request, signal: controller.signal })
+        } finally {
+          window.clearTimeout(timeout)
         }
         compared.push({ scenario, analysis, sunlight: estimateHours(analysis, 'sun'), earthVisibility: estimateHours(analysis, 'earth') })
         setResults([...compared])
@@ -132,23 +129,21 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
       </ol>}
 
       <div className="scenario-actions">
-        <button type="button" className="scenario-run mock" disabled={state === 'loading' || scenarios.length < 2} onClick={() => void compare(true)}>{state === 'loading' && source === 'mock' ? 'Comparando…' : 'Comparar demonstração'}</button>
-        <button type="button" className="scenario-run api" disabled={state === 'loading' || scenarios.length < 2 || !apiConfigured} onClick={() => void compare(false)}>{state === 'loading' && source === 'api' ? `Consultando ${results.length + 1}/${scenarios.length}…` : 'Comparar pela API'}</button>
+        <button type="button" className="scenario-run api" disabled={state === 'loading' || scenarios.length < 2 || !apiConfigured} onClick={() => void compare()}>{state === 'loading' ? `Consultando ${results.length + 1}/${scenarios.length}…` : 'Comparar pela API'}</button>
         {scenarios.length < 2 ? <span>Adicione pelo menos duas opções para comparar.</span> : !apiConfigured && <span>Consulta real indisponível: configure o backend da equipe.</span>}
       </div>
 
       {state === 'error' && <p className="scenario-error" role="alert">{message}</p>}
       {results.length > 0 && <>
-        <div className="scenario-results-label" aria-live="polite">{source === 'mock' ? 'COMPARAÇÃO DEMONSTRATIVA · DADOS SIMULADOS' : 'COMPARAÇÃO · DADOS DO BACKEND'}</div>
+        <div className="scenario-results-label" aria-live="polite">COMPARAÇÃO · DADOS DO BACKEND SPICE</div>
         <div className="scenario-results">
           {results.map((item) => <article className="scenario-result" key={item.scenario.id}>
-            <div className="scenario-result-title"><span>{item.scenario.name}</span>{source === 'mock' && <small>SIMULADO</small>}</div>
+            <div className="scenario-result-title"><span>{item.scenario.name}</span></div>
             <p>{item.scenario.latitude.toFixed(2)}°, {item.scenario.longitude.toFixed(2)}° · {new Date(item.analysis.interval.start).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' })}</p>
             <MiniEphemeris analysis={item.analysis} />
             <div className="scenario-metrics"><div><span>Sol acima do horizonte</span><strong>{item.sunlight.toFixed(1)} h</strong>{item.sunlight === bestSun && <em>Maior janela solar</em>}</div><div><span>Terra visível</span><strong>{item.earthVisibility.toFixed(1)} h</strong>{item.earthVisibility === bestEarth && <em>Maior janela de contato</em>}</div></div>
           </article>)}
         </div>
-        {source === 'mock' && <p className="scenario-footnote">Série sintética para testar a comparação; não representa efemérides reais nem deve orientar operações.</p>}
       </>}
     </section>
   )

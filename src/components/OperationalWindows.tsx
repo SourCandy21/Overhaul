@@ -3,11 +3,14 @@ import type { Observation } from '../types/analysis'
 
 type Body = 'sun' | 'earth'
 
+function horizonElevation(observation: Observation) {
+  return observation.terrain?.available ? observation.terrain.horizon_elevation_deg : observation.geometric_horizon_elevation_deg ?? 0
+}
+
 function aboveHorizon(item: Observation, body: Body) {
   const position = item[body]
   if (position.above_local_horizon !== undefined) return position.above_local_horizon
-  const terrain = item.terrain?.available ? item.terrain.horizon_elevation_deg : 0
-  return position.elevation_deg > terrain
+  return position.elevation_deg > horizonElevation(item)
 }
 
 function nextSetLabel(observations: Observation[], body: Body, selectedIndex: number) {
@@ -18,8 +21,8 @@ function nextSetLabel(observations: Observation[], body: Body, selectedIndex: nu
     const first = observations[index]
     const next = observations[index + 1]
     if (!aboveHorizon(first, body) || aboveHorizon(next, body)) continue
-    const firstHorizon = first.terrain?.available ? first.terrain.horizon_elevation_deg : 0
-    const nextHorizon = next.terrain?.available ? next.terrain.horizon_elevation_deg : 0
+    const firstHorizon = horizonElevation(first)
+    const nextHorizon = horizonElevation(next)
     const firstMargin = first[body].elevation_deg - firstHorizon
     const nextMargin = next[body].elevation_deg - nextHorizon
     const difference = firstMargin - nextMargin
@@ -48,8 +51,8 @@ export function OperationalWindows({ observations, selectedIndex, onSelectIndex 
   const current = observations[Math.min(selectedIndex, observations.length - 1)]
   const sunElevation = current.sun.elevation_deg
   const horizontalIncidence = aboveHorizon(current, 'sun') ? Math.max(0, Math.sin(sunElevation * Math.PI / 180)) * 100 : 0
-  const terrainThreshold = current.terrain?.available ? current.terrain.horizon_elevation_deg : 0
-  const geometryNote = current.terrain?.available ? `Horizonte local: ${terrainThreshold.toFixed(1)}°` : 'Horizonte geométrico: 0°'
+  const terrainThreshold = horizonElevation(current)
+  const geometryNote = current.terrain?.available ? `Horizonte local: ${terrainThreshold.toFixed(1)}°` : `Horizonte geométrico esférico: ${terrainThreshold.toFixed(1)}°`
 
   return (
     <section className="operational-windows" aria-label="Condições operacionais no horário selecionado">

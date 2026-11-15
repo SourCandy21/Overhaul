@@ -16,6 +16,7 @@ export interface Observation {
   time: string
   sun: BodyPosition
   earth: BodyPosition
+  geometric_horizon_elevation_deg?: number
   terrain?: { horizon_elevation_deg: number; available: boolean }
 }
 

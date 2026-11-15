@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    OVERHAUL_PUBLIC_DEPLOYMENT=true \
+    OVERHAUL_API_HOST=0.0.0.0
+
+WORKDIR /app
+
+COPY backend/requirements.txt ./requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
+COPY backend/*.py ./
+RUN python download_kernels.py \
+    && useradd --system --uid 10001 --create-home overhaul \
+    && chown -R overhaul:overhaul /app
+
+USER overhaul
+EXPOSE 10000
+CMD ["python", "server.py"]

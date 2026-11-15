@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+node_modules
+dist
+dist-ssr
+backend/.venv
+backend/kernels
+backend/__pycache__
+**/__pycache__
+*.pyc
+*.local
+.env*

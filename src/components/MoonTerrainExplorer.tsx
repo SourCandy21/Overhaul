@@ -92,16 +92,21 @@ function findTileUrl(xml: Document, layerId: string, latitude: number, longitude
       const tileRow = row + rowOffset
       const tileCol = col + colOffset
       if (tileRow < 0 || tileCol < 0 || tileRow >= matrixHeight || tileCol >= matrixWidth) continue
+      const tileTemplate = template
+        .replaceAll('{Style}', styleId)
+        .replaceAll('{TileMatrixSet}', matrixSetId)
+        .replaceAll('{TileMatrix}', matrixId)
+        .replaceAll('{TileRow}', String(tileRow))
+        .replaceAll('{TileCol}', String(tileCol))
+      const tileUrl = new URL(tileTemplate, 'https://trek.nasa.gov')
+      if (tileUrl.protocol !== 'https:' || tileUrl.hostname !== 'trek.nasa.gov' || tileUrl.port) {
+        throw new Error('O catálogo informou um endereço de tile fora do domínio HTTPS autorizado.')
+      }
       tiles.push({
         rowOffset,
         colOffset,
         center: rowOffset === 0 && colOffset === 0,
-        url: template
-          .replaceAll('{Style}', styleId)
-          .replaceAll('{TileMatrixSet}', matrixSetId)
-          .replaceAll('{TileMatrix}', matrixId)
-          .replaceAll('{TileRow}', String(tileRow))
-          .replaceAll('{TileCol}', String(tileCol)),
+        url: tileUrl.href,
       })
     }
   }
@@ -113,24 +118,35 @@ export function MoonTerrainExplorer({ latitude, longitude }: { latitude: number;
   const [layerState, setLayerState] = useState<LayerState>({ status: 'loading', message: 'Consultando catálogo WMTS da NASA…' })
   const [tileLoaded, setTileLoaded] = useState(false)
   const [marker, setMarker] = useState<{ x: number; y: number } | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
 
-  async function loadLayer(layer: TerrainLayer, pointLatitude = latitude, pointLongitude = longitude) {
+  function selectLayer(layer: TerrainLayer) {
     setSelected(layer)
     setTileLoaded(false)
     setMarker(null)
     setLayerState({ status: 'loading', message: 'Consultando catálogo WMTS da NASA…' })
-    try {
-      const response = await fetch(layer.capabilities)
-      if (!response.ok) throw new Error(`Catálogo respondeu HTTP ${response.status}`)
-      const xml = new DOMParser().parseFromString(await response.text(), 'application/xml')
-      if (xml.querySelector('parsererror')) throw new Error('O catálogo retornou XML inválido.')
-      const tile = findTileUrl(xml, layer.id, pointLatitude, pointLongitude)
-      setLayerState({ status: 'ready', message: 'Tiles ao redor do local encontrados no catálogo. Carregando…', tiles: tile.tiles })
-      setMarker(tile.marker)
-    } catch (error) {
-      setLayerState({ status: 'error', message: error instanceof Error ? error.message : 'Não foi possível consultar o catálogo WMTS.' })
-    }
   }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    async function requestLayer() {
+      try {
+        const response = await fetch(selected.capabilities, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Catálogo respondeu HTTP ${response.status}`)
+        const xml = new DOMParser().parseFromString(await response.text(), 'application/xml')
+        if (xml.querySelector('parsererror')) throw new Error('O catálogo retornou XML inválido.')
+        const tile = findTileUrl(xml, selected.id, latitude, longitude)
+        if (controller.signal.aborted) return
+        setLayerState({ status: 'ready', message: 'Tiles ao redor do local encontrados no catálogo. Carregando…', tiles: tile.tiles })
+        setMarker(tile.marker)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setLayerState({ status: 'error', message: error instanceof Error ? error.message : 'Não foi possível consultar o catálogo WMTS.' })
+      }
+    }
+    void requestLayer()
+    return () => controller.abort()
+  }, [latitude, longitude, retryKey, selected])
 
   function inspectLoadedTile(image: HTMLImageElement) {
     try {
@@ -152,12 +168,6 @@ export function MoonTerrainExplorer({ latitude, longitude }: { latitude: number;
     setTileLoaded(true)
   }
 
-  useEffect(() => {
-    void loadLayer(layers[0])
-    // Fetch the initial layer once when the explorer mounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   return (
     <section className="terrain-explorer" aria-label="Camadas lunares da API NASA Moon Trek">
       <div className="terrain-explorer-heading">
@@ -165,7 +175,7 @@ export function MoonTerrainExplorer({ latitude, longitude }: { latitude: number;
         <a href="https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon" target="_blank" rel="noreferrer">Documentação da API ↗</a>
       </div>
       <div className="terrain-layer-tabs" role="tablist" aria-label="Camada de terreno">
-        {layers.map((layer) => <button key={layer.id} type="button" role="tab" aria-selected={selected.id === layer.id} className={selected.id === layer.id ? 'selected' : ''} onClick={() => void loadLayer(layer)}>{layer.title}</button>)}
+        {layers.map((layer) => <button key={layer.id} type="button" role="tab" aria-selected={selected.id === layer.id} className={selected.id === layer.id ? 'selected' : ''} onClick={() => selectLayer(layer)}>{layer.title}</button>)}
       </div>
       <div className="terrain-map">
         {layerState.tiles && !tileLoaded && <div className="terrain-map-loading">Carregando mapa lunar ao redor do local…</div>}
@@ -173,7 +183,7 @@ export function MoonTerrainExplorer({ latitude, longitude }: { latitude: number;
           {layerState.tiles.map((tile) => <img key={`${tile.rowOffset}-${tile.colOffset}`} src={tile.url} alt="" crossOrigin="anonymous" style={{ left: `${50 - (marker?.x ?? 50) + tile.colOffset * 100}%`, top: `${50 - (marker?.y ?? 50) + tile.rowOffset * 100}%` }} onLoad={(event) => { if (tile.center) inspectLoadedTile(event.currentTarget) }} onError={() => { if (tile.center) setLayerState({ status: 'error', message: 'O catálogo respondeu, mas o tile central deste local não foi carregado. Verifique a cobertura ou a conexão com o serviço.' }) }} />)}
           {tileLoaded && <span className="terrain-site-marker" aria-label="Local selecionado" title="Local selecionado" />}
         </div>}
-        {layerState.status === 'error' && <div className="terrain-map-fallback"><strong>Camada indisponível</strong><span>{layerState.message}</span><a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">Abrir NASA Moon Trek ↗</a></div>}
+        {layerState.status === 'error' && <div className="terrain-map-fallback"><strong>Camada indisponível</strong><span>{layerState.message}</span><button type="button" onClick={() => { setLayerState({ status: 'loading', message: 'Consultando catálogo WMTS da NASA…' }); setRetryKey((value) => value + 1) }}>Tentar novamente</button><a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">Abrir NASA Moon Trek ↗</a></div>}
         <span className="terrain-coordinate">LOCAL SELECIONADO · {latitude.toFixed(2)}°, {longitude.toFixed(2)}°</span>
         <a className="terrain-open-trek" href={`https://trek.nasa.gov/moon/?lat=${latitude}&lon=${longitude}`} target="_blank" rel="noreferrer">Abrir no Moon Trek ↗</a>
       </div>

@@ -29,6 +29,8 @@ function isBodyPosition(value: unknown): value is BodyPosition {
 
 function isObservation(value: unknown): value is Observation {
   if (!isRecord(value) || typeof value.time !== 'string' || !isBodyPosition(value.sun) || !isBodyPosition(value.earth)) return false
+  if (value.geometric_horizon_elevation_deg !== undefined
+    && (typeof value.geometric_horizon_elevation_deg !== 'number' || !Number.isFinite(value.geometric_horizon_elevation_deg))) return false
   if (value.terrain === undefined) return true
   return isRecord(value.terrain)
     && typeof value.terrain.available === 'boolean'
@@ -77,7 +79,7 @@ export async function fetchSiteAnalysis(params: SiteAnalysisRequest): Promise<Si
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new Error('Não foi possível alcançar o backend. Confirme a URL e se o serviço está em execução.')
+    throw new Error('Não foi possível alcançar o backend. Confirme a URL e se o serviço está em execução.', { cause: error })
   }
 
   const payload: unknown = await response.json().catch(() => null)
