@@ -1,57 +1,77 @@
 # Overhaul · Lunar Landing Site Navigator
 
-Interface para consultar e comparar a elevação do Sol e da Terra em coordenadas lunares e períodos selecionados. Os dados são servidos pela API Overhaul configurada; o frontend não chama fontes científicas externas diretamente.
+Interface for querying and comparing Sun and Earth elevation at lunar coordinates and selected time periods. Data is provided by the configured Overhaul API; the frontend does not call external scientific data sources directly.
 
-## Desenvolvimento
+## Development
 
-1. Instale Python 3.10 ou superior.
-2. Execute o preparador do backend no PowerShell:
+1. Install Python 3.10 or later.
+2. Run the backend setup script in PowerShell:
 
    ```powershell
    .\backend\run.ps1
    ```
 
-   Na primeira execução, o script cria o ambiente Python, instala `spiceypy` e baixa kernels oficiais NAIF/JPL (aproximadamente 44 MB). Eles ficam em `backend/kernels/` e não são versionados no Git. O backend permanece em execução nesse terminal.
-3. Em outro terminal, copie `.env.example` para `.env.local` e execute `npm run dev`.
+   On its first run, the script creates the Python environment, installs `spiceypy`, and downloads official NAIF/JPL kernels (approximately 44 MB). These files are stored in `backend/kernels/` and are not tracked by Git. The backend continues running in that terminal.
 
-Se preferir preparar manualmente, os comandos são `python -m venv backend/.venv`, `backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt`, `backend/.venv/Scripts/python.exe backend/download_kernels.py` e `backend/.venv/Scripts/python.exe backend/server.py`.
+3. In another terminal, copy `.env.example` to `.env.local` and run `npm run dev`.
 
-Sem backend configurado, a tela mostra o estado de configuração e não apresenta resultados científicos fictícios. O módulo de comparação permite salvar até três combinações de coordenadas, data/hora local, duração e intervalo; a comparação consulta cada cenário sequencialmente pela API SPICE local.
+If you prefer manual setup, use the following commands:
 
-## Segurança
+```powershell
+python -m venv backend/.venv
+backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+backend/.venv/Scripts/python.exe backend/download_kernels.py
+backend/.venv/Scripts/python.exe backend/server.py
+```
 
-O backend é um serviço local de desenvolvimento, sem autenticação: ele recusa bind fora de loopback, limita origens, exige uma origem autorizada nas análises, restringe parâmetros e consultas concorrentes, adiciona headers de segurança e valida os kernels por SHA-256. Os logs registram rota e status, sem coordenadas e horários da query. Não o exponha diretamente à rede ou à internet; uma implantação remota exige autenticação, TLS e um servidor de produção endurecido. No frontend, dados remotos são renderizados pelo React sem `innerHTML`, links externos usam `rel="noreferrer"` e templates WMTS precisam permanecer em HTTPS no host `trek.nasa.gov`.
+Without a configured backend, the interface displays the configuration state and does not present fabricated scientific results. The comparison module allows you to save up to three combinations of coordinates, local date/time, duration, and sampling interval. Each scenario is queried sequentially through the local SPICE API.
 
-Os nomes seguem convenções por camada: componentes React em `PascalCase`, variáveis/funções TypeScript em `camelCase`, classes CSS em `kebab-case` e campos do contrato científico em `snake_case`. Os estados genéricos (`selected`, `loading`, `error`) ficam sob seletores dos componentes correspondentes.
+## Security
 
-Com uma análise carregada, a linha do tempo sincroniza o gráfico, a posição no céu e os indicadores de próximo ocaso/perda de contato. O indicador de incidência solar horizontal é apenas `sin(elevação solar)` convertido em percentual: não estima potência, orientação do painel, sombras do relevo ou condições do equipamento. Se as observações incluírem horizonte local, a disponibilidade considera essa obstrução; sem esse campo, a interface usa e identifica o horizonte geométrico de 0°. Os horários de cruzamento são interpolados entre observações e, portanto, dependem do passo retornado pelo backend.
+The backend is a local development service without authentication. It refuses to bind to addresses outside loopback, restricts allowed origins, requires an authorized origin for analysis requests, limits parameters and concurrent queries, adds security headers, and validates kernels using SHA-256.
 
-O backend local usa `spiceypy` com os kernels NAIF/JPL `DE440s`, `moon_pa_de440_200625.bpc`, `moon_de440_250416.tf` e `naif0012.tls`. Não faz chamadas de rede durante as análises e não consulta o Horizons. O frame `MOON_ME` alinha as coordenadas de entrada ao referencial lunar mean-Earth usado para coordenadas selenográficas, com orientação de alta precisão do DE440. A referência é uma esfera lunar de 1.737,4 km; para um observador elevado, o backend calcula o mergulho geométrico do horizonte. O kernel DE440s cobre aproximadamente 1850–2149; períodos fora da cobertura são rejeitados.
+Logs record the route and HTTP status without recording query coordinates or timestamps. Do not expose this service directly to a network or the internet. Remote deployment requires authentication, TLS, and a hardened production server.
 
-## Contrato esperado pelo frontend
+In the frontend, remote data is rendered by React without `innerHTML`. External links use `rel="noreferrer"`, and WMTS templates must remain on HTTPS when hosted at `trek.nasa.gov`.
+
+Naming conventions follow the conventions of each layer: React components use `PascalCase`, TypeScript variables and functions use `camelCase`, CSS classes use `kebab-case`, and scientific contract fields use `snake_case`. Generic states (`selected`, `loading`, `error`) are scoped under their corresponding component selectors.
+
+When an analysis is loaded, the timeline synchronizes the chart, sky position, and indicators for the next sunset and loss of Earth visibility.
+
+The horizontal solar incidence indicator is only `sin(solar elevation)` converted into a percentage. It does not estimate electrical power, panel orientation, terrain shadows, or equipment conditions.
+
+If observations include a local horizon, availability calculations account for that obstruction. Without this field, the interface uses and identifies the geometric horizon at 0°. Horizon crossing times are interpolated between observations and therefore depend on the sampling interval returned by the backend.
+
+The local backend uses `spiceypy` with the NAIF/JPL kernels `DE440s`, `moon_pa_de440_200625.bpc`, `moon_de440_250416.tf`, and `naif0012.tls`. It makes no network requests during analysis and does not query Horizons.
+
+The `MOON_ME` frame aligns input coordinates with the lunar mean-Earth reference frame used for selenographic coordinates, using high-precision DE440 orientation data.
+
+The reference model is a spherical Moon with a radius of 1,737.4 km. For an elevated observer, the backend calculates the geometric horizon dip. The DE440s kernel covers approximately 1850–2149; periods outside this coverage are rejected.
+
+## Frontend API Contract
 
 ### `GET /api/analysis`
 
-Parâmetros de query:
+Query parameters:
 
-| Parâmetro | Tipo | Exemplo |
+| Parameter | Type | Example |
 | --- | --- | --- |
-| `latitude` | graus, número | `-89.5` |
-| `longitude` | graus, número | `0` |
-| `altitude_m` | metros, número | `0` |
-| `start` | data/hora ISO 8601 UTC | `2026-12-01T00:00:00.000Z` |
-| `end` | data/hora ISO 8601 UTC | `2026-12-02T00:00:00.000Z` |
-| `step` | passo de amostragem SPICE | `1h` |
+| `latitude` | degrees, number | `-89.5` |
+| `longitude` | degrees, number | `0` |
+| `altitude_m` | meters, number | `0` |
+| `start` | ISO 8601 UTC date/time | `2026-12-01T00:00:00.000Z` |
+| `end` | ISO 8601 UTC date/time | `2026-12-02T00:00:00.000Z` |
+| `step` | SPICE sampling interval | `1h` |
 
-O endpoint local transforma cada posição SPICE em azimute e elevação topocêntricos vistos de um ponto fixo na superfície lunar. Usa uma esfera de referência lunar de 1.737,4 km, altitude informada em metros e correção de tempo de luz/aberração `CN+S`; a elevação reportada é geométrica, sem refração atmosférica.
+The local endpoint transforms each SPICE position into topocentric azimuth and elevation as seen from a fixed point on the lunar surface. It uses a reference lunar sphere with a radius of 1,737.4 km, the specified altitude in meters, and the `CN+S` light-time and stellar aberration correction. Reported elevation is geometric and does not include atmospheric refraction.
 
-Resposta de sucesso (`application/json`):
+Successful response (`application/json`):
 
 ```json
 {
   "site": {
     "id": "custom",
-    "name": "Local personalizado",
+    "name": "Custom location",
     "latitude": -89.5,
     "longitude": 0,
     "altitude_m": 0
@@ -77,16 +97,38 @@ Resposta de sucesso (`application/json`):
 }
 ```
 
-`summary` e `terrain` são opcionais. Este backend retorna `terrain_adjusted: false` e não inclui `terrain`: calcula o horizonte geométrico da esfera e a queda angular do horizonte para a altitude informada, mas não deriva obstruções locais por crateras. As janelas em horas interpolam o cruzamento do horizonte reportado entre amostras. O endpoint limita a duração a 72 horas e os passos a `30m`, `1h`, `2h` ou `4h`. Retorna erros com status HTTP apropriado e `{ "error": "mensagem" }`.
+`summary` and `terrain` are optional.
 
-## Integrações de dados de terreno
+This backend returns `terrain_adjusted: false` and does not include `terrain`. It calculates the geometric horizon of the sphere and the angular horizon dip for the specified altitude, but it does not derive local obstructions caused by craters.
 
-O componente `src/components/MoonTerrainExplorer.tsx` consulta o catálogo WMTS do NASA Moon Trek, lê o template e as matrizes publicados e calcula o tile polar para as coordenadas do formulário, exibindo um marcador no ponto selecionado. Consulte a [documentação WMTS do Moon Trek](https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon) para camadas, projeções e matrizes disponíveis.
+Time windows, expressed in hours, interpolate horizon crossings between samples. The endpoint limits the analysis duration to 72 hours and supports sampling intervals of `30m`, `1h`, `2h`, or `4h`.
 
-As posições celestes chegam pelo endpoint local Overhaul `GET /api/analysis`. O serviço escuta apenas em `127.0.0.1:8000`, permite por padrão as origens locais do Vite e oferece `GET /health` para confirmar dependências e kernels. Configure `OVERHAUL_API_PORT` e `OVERHAUL_CORS_ORIGINS` quando necessário; o binding remoto é bloqueado porque esta API não tem autenticação. A rota de análise exige uma origem CORS autorizada, limita o tamanho e os campos da consulta e restringe análises concorrentes. Os kernels são verificados por SHA-256 antes de serem carregados. QuickMap permanece como fonte cartográfica independente; o backend SPICE não consulta produtos LOLA nem aplica obstrução topográfica. Os kernels são distribuídos pelo [NAIF/JPL](https://naif.jpl.nasa.gov/naif/data_generic.html); consulte também a [documentação SPICE de observadores em pontos de superfície](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkcpo_c.html).
+Errors are returned with the appropriate HTTP status code and the following structure:
+
+```json
+{ "error": "message" }
+```
+
+## Terrain Data Integrations
+
+The `src/components/MoonTerrainExplorer.tsx` component queries the NASA Moon Trek WMTS catalog, reads the published template and tile matrices, and calculates the polar tile for the coordinates entered in the form, displaying a marker at the selected location.
+
+Refer to the [Moon Trek WMTS documentation](https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon) for available layers, projections, and tile matrices.
+
+Celestial positions are provided by the local Overhaul endpoint `GET /api/analysis`.
+
+The service listens only on `127.0.0.1:8000`, allows Vite local origins by default, and provides `GET /health` to verify dependencies and kernels.
+
+Configure `OVERHAUL_API_PORT` and `OVERHAUL_CORS_ORIGINS` when necessary. Remote binding is blocked because this API does not have authentication.
+
+The analysis route requires an authorized CORS origin, limits query size and fields, and restricts concurrent analyses. Kernels are verified using SHA-256 before being loaded.
+
+QuickMap remains an independent cartographic source. The SPICE backend does not query LOLA products or apply topographic obstruction corrections.
+
+Kernels are distributed by [NAIF/JPL](https://naif.jpl.nasa.gov/naif/data_generic.html). See also the [SPICE documentation for observers at surface points](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkcpo_c.html).
 
 ## Scripts
 
-- `npm run dev` — servidor local Vite
-- `npm run build` — compilação TypeScript e build de produção
-- `npm run lint` — lint do projeto
+- `npm run dev` — Vite development server
+- `npm run build` — TypeScript compilation and production build
+- `npm run lint` — project linting
