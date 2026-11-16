@@ -16,7 +16,7 @@ function aboveHorizon(item: Observation, body: Body) {
 function nextSetLabel(observations: Observation[], body: Body, selectedIndex: number) {
   if (!observations.length) return '—'
   const startIndex = Math.min(selectedIndex, observations.length - 1)
-  if (!aboveHorizon(observations[startIndex], body)) return 'Abaixo agora'
+  if (!aboveHorizon(observations[startIndex], body)) return 'Below now'
   for (let index = startIndex; index < observations.length - 1; index += 1) {
     const first = observations[index]
     const next = observations[index + 1]
@@ -34,7 +34,7 @@ function nextSetLabel(observations: Observation[], body: Body, selectedIndex: nu
     const rest = minutes % 60
     return hours ? `${hours} h ${String(rest).padStart(2, '0')} min` : `${rest} min`
   }
-  return 'Sem ocaso nesta janela'
+  return 'No sunset in this window'
 }
 
 export function OperationalWindows({ observations, selectedIndex, onSelectIndex }: { observations: Observation[]; selectedIndex: number; onSelectIndex: (index: number) => void }) {
@@ -52,16 +52,16 @@ export function OperationalWindows({ observations, selectedIndex, onSelectIndex 
   const sunElevation = current.sun.elevation_deg
   const horizontalIncidence = aboveHorizon(current, 'sun') ? Math.max(0, Math.sin(sunElevation * Math.PI / 180)) * 100 : 0
   const terrainThreshold = horizonElevation(current)
-  const geometryNote = current.terrain?.available ? `Horizonte local: ${terrainThreshold.toFixed(1)}°` : `Horizonte geométrico esférico: ${terrainThreshold.toFixed(1)}°`
+  const geometryNote = current.terrain?.available ? `Local horizon: ${terrainThreshold.toFixed(1)}°` : `Spherical geometric horizon: ${terrainThreshold.toFixed(1)}°`
 
   return (
-    <section className="operational-windows" aria-label="Condições operacionais no horário selecionado">
-      <div className="operational-heading"><div><span className="panel-overline">NO HORÁRIO SELECIONADO</span><p>{new Date(current.time).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</p></div><button type="button" className="timeline-play" aria-pressed={playing} onClick={() => setPlaying((value) => !value)}>{playing ? 'Pausar' : '▶ Reproduzir período'}</button></div>
+    <section className="operational-windows" aria-label="Operational conditions at the selected time">
+      <div className="operational-heading"><div><span className="panel-overline">SELECTED TIME</span><p>{new Date(current.time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</p></div><button type="button" className="timeline-play" aria-pressed={playing} onClick={() => setPlaying((value) => !value)}>{playing ? 'Pause' : '▶ Play time period'}</button></div>
       <div className="operational-grid">
-        <article><span>Próximo pôr do Sol</span><strong>{nextSetLabel(observations, 'sun', selectedIndex)}</strong><small>Elev. solar {sunElevation.toFixed(1)}° · incidência horizontal {horizontalIncidence.toFixed(0)}%</small></article>
-        <article><span>Próxima perda de contato</span><strong>{nextSetLabel(observations, 'earth', selectedIndex)}</strong><small>Elevação da Terra {current.earth.elevation_deg.toFixed(1)}°</small></article>
+        <article><span>Next sunset</span><strong>{nextSetLabel(observations, 'sun', selectedIndex)}</strong><small>Solar elev. {sunElevation.toFixed(1)}° · horizontal incidence {horizontalIncidence.toFixed(0)}%</small></article>
+        <article><span>Next loss of contact</span><strong>{nextSetLabel(observations, 'earth', selectedIndex)}</strong><small>Earth elevation {current.earth.elevation_deg.toFixed(1)}°</small></article>
       </div>
-      <p className="operational-note">Incidência é uma proporção geométrica no plano horizontal, não uma previsão de potência. {geometryNote}; sem refração atmosférica.</p>
+      <p className="operational-note">Incidence is a geometric proportion on a horizontal plane, not a power forecast. {geometryNote}; atmospheric refraction is not included.</p>
     </section>
   )
 }

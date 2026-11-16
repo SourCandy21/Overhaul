@@ -59,7 +59,7 @@ function isSiteAnalysis(value: unknown): value is SiteAnalysis {
 
 export async function fetchSiteAnalysis(params: SiteAnalysisRequest): Promise<SiteAnalysis> {
   if (!apiBaseUrl) {
-    throw new Error('Defina VITE_API_BASE_URL no arquivo .env.local e inicie o backend de análise.')
+    throw new Error('Set VITE_API_BASE_URL in .env.local and start the analysis backend.')
   }
 
   const query = new URLSearchParams({
@@ -79,16 +79,16 @@ export async function fetchSiteAnalysis(params: SiteAnalysisRequest): Promise<Si
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new Error('Não foi possível alcançar o backend. Confirme a URL e se o serviço está em execução.', { cause: error })
+    throw new Error('Could not reach the backend. Check the URL and confirm the service is running.', { cause: error })
   }
 
   const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const apiMessage = isRecord(payload) && typeof payload.error === 'string' ? payload.error : null
-    throw new Error(apiMessage ?? `O backend respondeu com erro HTTP ${response.status}.`)
+    throw new Error(apiMessage ?? `The backend returned HTTP error ${response.status}.`)
   }
   if (!isSiteAnalysis(payload)) {
-    throw new Error('A resposta da API não segue o contrato SiteAnalysis esperado pelo navegador.')
+    throw new Error('The API response does not match the SiteAnalysis contract expected by the navigator.')
   }
   return payload
 }

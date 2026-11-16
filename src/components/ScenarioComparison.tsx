@@ -67,7 +67,7 @@ function miniLine(analysis: SiteAnalysis, body: 'sun' | 'earth' | 'horizon') {
 }
 
 function MiniEphemeris({ analysis }: { analysis: SiteAnalysis }) {
-  return <div className="mini-ephemeris" role="img" aria-label="Elevação do Sol e da Terra em relação ao horizonte durante o cenário"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1="90" y2="90" className="mini-horizon" /><polyline points={miniLine(analysis, 'horizon')} className="mini-horizon-profile" /><polyline points={miniLine(analysis, 'sun')} className="mini-sun-line" /><polyline points={miniLine(analysis, 'earth')} className="mini-earth-line" /></svg><div><span><i className="mini-sun-swatch" />Sol</span><span><i className="mini-earth-swatch" />Terra</span></div></div>
+  return <div className="mini-ephemeris" role="img" aria-label="Sun and Earth elevation relative to the horizon during this scenario"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1="90" y2="90" className="mini-horizon" /><polyline points={miniLine(analysis, 'horizon')} className="mini-horizon-profile" /><polyline points={miniLine(analysis, 'sun')} className="mini-sun-line" /><polyline points={miniLine(analysis, 'earth')} className="mini-earth-line" /></svg><div><span><i className="mini-sun-swatch" />Sun</span><span><i className="mini-earth-swatch" />Earth</span></div></div>
 }
 
 export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDraft; apiConfigured: boolean }) {
@@ -79,7 +79,7 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
   function addScenario() {
     if (scenarios.length >= 3) return
     const id = Date.now()
-    setScenarios((current) => [...current, { ...draft, id, name: `Opção ${current.length + 1}` }])
+    setScenarios((current) => [...current, { ...draft, id, name: `Option ${current.length + 1}` }])
     setResults([])
     setState('idle')
     setMessage('')
@@ -108,8 +108,8 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
     } catch (error) {
       setState('error')
       setMessage(error instanceof DOMException && error.name === 'AbortError'
-        ? 'A consulta de um cenário ultrapassou 30 segundos.'
-        : error instanceof Error ? error.message : 'Não foi possível comparar os cenários.')
+        ? 'A scenario request exceeded 30 seconds.'
+        : error instanceof Error ? error.message : 'Could not compare the scenarios.')
     }
   }
 
@@ -118,30 +118,30 @@ export function ScenarioComparison({ draft, apiConfigured }: { draft: ScenarioDr
 
   return (
     <section className="scenario-comparison" aria-labelledby="scenario-title">
-      <div className="scenario-heading"><div><span className="panel-overline">PLANEJAMENTO DE MISSÃO</span><h3 id="scenario-title">Compare opções de pouso</h3><p>Guarde combinações de local e horário, depois avalie luz solar e contato direto com a Terra.</p></div><button className="scenario-add" type="button" disabled={scenarios.length >= 3} onClick={addScenario}>+ Adicionar opção</button></div>
+      <div className="scenario-heading"><div><span className="panel-overline">MISSION PLANNING</span><h3 id="scenario-title">Compare landing options</h3><p>Save location and time combinations, then compare sunlight and direct contact with Earth.</p></div><button className="scenario-add" type="button" disabled={scenarios.length >= 3} onClick={addScenario}>+ Add option</button></div>
 
-      {scenarios.length === 0 ? <div className="scenario-empty"><span>01</span><p>Configure um local e um horário acima e adicione a primeira opção.</p></div> : <ol className="scenario-list">
+      {scenarios.length === 0 ? <div className="scenario-empty"><span>01</span><p>Set a location and time above, then add your first option.</p></div> : <ol className="scenario-list">
         {scenarios.map((scenario) => <li key={scenario.id}>
           <span className="scenario-index">{String(scenarios.indexOf(scenario) + 1).padStart(2, '0')}</span>
-          <div className="scenario-copy"><strong>{scenario.name}</strong><span>{scenario.latitude.toFixed(2)}°, {scenario.longitude.toFixed(2)}° · {new Date(scenario.startDateTime).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' })} · {scenario.durationHours} h</span></div>
-          <button type="button" aria-label={`Remover ${scenario.name}`} disabled={state === 'loading'} onClick={() => { setScenarios((current) => current.filter((item) => item.id !== scenario.id)); setResults([]) }}>Remover</button>
+          <div className="scenario-copy"><strong>{scenario.name}</strong><span>{scenario.latitude.toFixed(2)}°, {scenario.longitude.toFixed(2)}° · {new Date(scenario.startDateTime).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} · {scenario.durationHours} h</span></div>
+          <button type="button" aria-label={`Remove ${scenario.name}`} disabled={state === 'loading'} onClick={() => { setScenarios((current) => current.filter((item) => item.id !== scenario.id)); setResults([]) }}>Remove</button>
         </li>)}
       </ol>}
 
       <div className="scenario-actions">
-        <button type="button" className="scenario-run api" disabled={state === 'loading' || scenarios.length < 2 || !apiConfigured} onClick={() => void compare()}>{state === 'loading' ? `Consultando ${results.length + 1}/${scenarios.length}…` : 'Comparar pela API'}</button>
-        {scenarios.length < 2 ? <span>Adicione pelo menos duas opções para comparar.</span> : !apiConfigured && <span>Consulta real indisponível: configure o backend da equipe.</span>}
+        <button type="button" className="scenario-run api" disabled={state === 'loading' || scenarios.length < 2 || !apiConfigured} onClick={() => void compare()}>{state === 'loading' ? `Loading ${results.length + 1}/${scenarios.length}…` : 'Compare via API'}</button>
+        {scenarios.length < 2 ? <span>Add at least two options to compare.</span> : !apiConfigured && <span>Live analysis unavailable: configure the team backend.</span>}
       </div>
 
       {state === 'error' && <p className="scenario-error" role="alert">{message}</p>}
       {results.length > 0 && <>
-        <div className="scenario-results-label" aria-live="polite">COMPARAÇÃO · DADOS DO BACKEND SPICE</div>
+        <div className="scenario-results-label" aria-live="polite">COMPARISON · SPICE BACKEND DATA</div>
         <div className="scenario-results">
           {results.map((item) => <article className="scenario-result" key={item.scenario.id}>
             <div className="scenario-result-title"><span>{item.scenario.name}</span></div>
-            <p>{item.scenario.latitude.toFixed(2)}°, {item.scenario.longitude.toFixed(2)}° · {new Date(item.analysis.interval.start).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+            <p>{item.scenario.latitude.toFixed(2)}°, {item.scenario.longitude.toFixed(2)}° · {new Date(item.analysis.interval.start).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</p>
             <MiniEphemeris analysis={item.analysis} />
-            <div className="scenario-metrics"><div><span>Sol acima do horizonte</span><strong>{item.sunlight.toFixed(1)} h</strong>{item.sunlight === bestSun && <em>Maior janela solar</em>}</div><div><span>Terra visível</span><strong>{item.earthVisibility.toFixed(1)} h</strong>{item.earthVisibility === bestEarth && <em>Maior janela de contato</em>}</div></div>
+            <div className="scenario-metrics"><div><span>Sun above the horizon</span><strong>{item.sunlight.toFixed(1)} h</strong>{item.sunlight === bestSun && <em>Longest sunlight window</em>}</div><div><span>Earth visible</span><strong>{item.earthVisibility.toFixed(1)} h</strong>{item.earthVisibility === bestEarth && <em>Longest contact window</em>}</div></div>
           </article>)}
         </div>
       </>}

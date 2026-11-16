@@ -32,19 +32,19 @@ class SpiceUnavailable(RuntimeError):
 def ensure_kernels_loaded() -> None:
     global _KERNELS_LOADED
     if SPICE_IMPORT_ERROR:
-        raise SpiceUnavailable("Instale as dependências do backend com: pip install -r backend/requirements.txt")
+        raise SpiceUnavailable("Install backend dependencies with: pip install -r backend/requirements.txt")
     with _SPICE_LOCK:
         if _KERNELS_LOADED:
             return
         missing = missing_kernels()
         if missing:
             raise SpiceUnavailable(
-                "Kernels SPICE ausentes: " + ", ".join(missing) + ". Execute: python backend/download_kernels.py"
+                "Missing SPICE kernels: " + ", ".join(missing) + ". Run: python backend/download_kernels.py"
             )
         invalid = invalid_kernels()
         if invalid:
             raise SpiceUnavailable(
-                "Falha na verificação SHA-256 dos kernels: " + ", ".join(invalid) + ". Execute: python backend/download_kernels.py"
+                "SPICE kernel SHA-256 verification failed: " + ", ".join(invalid) + ". Run: python backend/download_kernels.py"
             )
         assert spice is not None
         spice.kclear()
@@ -52,12 +52,12 @@ def ensure_kernels_loaded() -> None:
             for name in KERNELS:
                 spice.furnsh(str(KERNEL_DIR / name))
             if spice.namfrm(MOON_FRAME) == 0:
-                raise RuntimeError(f"Frame SPICE não definido: {MOON_FRAME}")
+                raise RuntimeError(f"SPICE frame not defined: {MOON_FRAME}")
             if spice.wncard(spice.spkcov(str(KERNEL_DIR / "de440s.bsp"), 301)) == 0:
-                raise RuntimeError("O kernel planetary DE440s não contém cobertura para a Lua.")
+                raise RuntimeError("The DE440s planetary kernel does not cover the Moon.")
         except Exception as error:
             spice.kclear()
-            raise SpiceUnavailable(f"Não foi possível carregar os kernels SPICE: {error}") from error
+            raise SpiceUnavailable(f"Could not load SPICE kernels: {error}") from error
         _KERNELS_LOADED = True
 
 
@@ -65,9 +65,9 @@ def _parse_datetime(value: str, name: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
-        raise ValueError(f"'{name}' deve ser uma data/hora ISO 8601 válida.") from error
+        raise ValueError(f"'{name}' must be a valid ISO 8601 date and time.") from error
     if parsed.tzinfo is None:
-        raise ValueError(f"'{name}' precisa incluir fuso horário (por exemplo, Z ou -03:00).")
+        raise ValueError(f"'{name}' must include a time zone (for example, Z or -03:00).")
     return parsed.astimezone(timezone.utc)
 
 
@@ -75,9 +75,9 @@ def _finite_float(value: str, name: str) -> float:
     try:
         result = float(value)
     except (TypeError, ValueError) as error:
-        raise ValueError(f"'{name}' deve ser numérico.") from error
+        raise ValueError(f"'{name}' must be numeric.") from error
     if not math.isfinite(result):
-        raise ValueError(f"'{name}' deve ser um número finito.")
+        raise ValueError(f"'{name}' must be a finite number.")
     return result
 
 
@@ -85,28 +85,28 @@ def parse_request(params: dict[str, str]) -> dict[str, Any]:
     required = ("latitude", "longitude", "altitude_m", "start", "end", "step")
     missing = [key for key in required if not params.get(key)]
     if missing:
-        raise ValueError("Parâmetros obrigatórios ausentes: " + ", ".join(missing))
+        raise ValueError("Missing required parameters: " + ", ".join(missing))
 
     latitude = _finite_float(params["latitude"], "latitude")
     longitude = _finite_float(params["longitude"], "longitude")
     altitude_m = _finite_float(params["altitude_m"], "altitude_m")
     if not -90 <= latitude <= 90:
-        raise ValueError("'latitude' deve estar entre -90 e 90 graus.")
+        raise ValueError("'latitude' must be between -90 and 90 degrees.")
     if not -180 <= longitude <= 180:
-        raise ValueError("'longitude' deve estar entre -180 e 180 graus.")
+        raise ValueError("'longitude' must be between -180 and 180 degrees.")
     if not -10_000 <= altitude_m <= 10_000:
-        raise ValueError("'altitude_m' deve estar entre -10000 e 10000 metros em relação à esfera de referência.")
+        raise ValueError("'altitude_m' must be between -10000 and 10000 meters relative to the reference sphere.")
 
     start = _parse_datetime(params["start"], "start")
     end = _parse_datetime(params["end"], "end")
     if end <= start:
-        raise ValueError("'end' precisa ser posterior a 'start'.")
+        raise ValueError("'end' must be after 'start'.")
     if end - start > timedelta(hours=72):
-        raise ValueError("O período máximo por consulta é de 72 horas.")
+        raise ValueError("The maximum query period is 72 hours.")
 
     step = params["step"].strip().lower()
     if step not in STEP_SECONDS:
-        raise ValueError("'step' deve ser 30m, 1h, 2h ou 4h.")
+        raise ValueError("'step' must be 30m, 1h, 2h, or 4h.")
 
     return {"latitude": latitude, "longitude": longitude, "altitude_m": altitude_m, "start": start, "end": end, "step": step}
 
@@ -177,7 +177,7 @@ def analyze(raw_params: dict[str, str]) -> dict[str, Any]:
         count = spice.wncard(coverage)
         coverage_intervals = [spice.wnfetd(coverage, index) for index in range(count)]
         if not any(begin + 86400 <= start_et and end_et <= finish - 86400 for begin, finish in coverage_intervals):
-            raise ValueError("A data ou o período está fora da cobertura segura dos kernels DE440s instalados (aprox. 1850–2149 UTC).")
+            raise ValueError("The date or time period is outside the safe coverage of the installed DE440s kernels (approximately 1850–2149 UTC).")
 
         interval_seconds = STEP_SECONDS[request["step"]]
         total_seconds = (request["end"] - request["start"]).total_seconds()
@@ -196,7 +196,7 @@ def analyze(raw_params: dict[str, str]) -> dict[str, Any]:
     return {
         "site": {
             "id": "custom",
-            "name": "Local personalizado",
+            "name": "Custom site",
             "latitude": request["latitude"],
             "longitude": request["longitude"],
             "altitude_m": request["altitude_m"],

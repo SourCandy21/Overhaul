@@ -19,9 +19,9 @@ try:
     if not ipaddress.ip_address(HOST).is_loopback and not PUBLIC_DEPLOYMENT:
         raise ValueError
 except ValueError as error:
-    raise RuntimeError("Para escutar fora do loopback, habilite explicitamente OVERHAUL_PUBLIC_DEPLOYMENT=true.") from error
+    raise RuntimeError("To listen outside loopback, explicitly enable OVERHAUL_PUBLIC_DEPLOYMENT=true.") from error
 if not 1 <= PORT <= 65535:
-    raise RuntimeError("OVERHAUL_API_PORT precisa estar entre 1 e 65535.")
+    raise RuntimeError("OVERHAUL_API_PORT must be between 1 and 65535.")
 ALLOWED_ORIGINS = {
     origin.strip()
     for origin in os.getenv(
@@ -35,7 +35,7 @@ if PUBLIC_DEPLOYMENT and (
     or "*" in ALLOWED_ORIGINS
     or any(not origin.startswith("https://") for origin in ALLOWED_ORIGINS)
 ):
-    raise RuntimeError("Em implantação pública, OVERHAUL_CORS_ORIGINS deve listar a origem HTTPS exata do frontend.")
+    raise RuntimeError("For public deployments, OVERHAUL_CORS_ORIGINS must list the exact HTTPS origin of the frontend.")
 ANALYSIS_SLOTS = threading.BoundedSemaphore(value=2)
 
 
@@ -71,7 +71,7 @@ class APIHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:  # noqa: N802
         origin, allowed = self._origin()
         if not allowed:
-            self._send_json(403, {"error": "Origem não autorizada para este backend local."})
+            self._send_json(403, {"error": "Origin not authorized for this backend."})
             return
         self.send_response(204)
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -85,7 +85,7 @@ class APIHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         origin, allowed = self._origin()
         if not allowed:
-            self._send_json(403, {"error": "Origem não autorizada para este backend local."})
+            self._send_json(403, {"error": "Origin not authorized for this backend."})
             return
 
         path = urlsplit(self.path)
@@ -99,31 +99,31 @@ class APIHandler(BaseHTTPRequestHandler):
             return
 
         if path.path != "/api/analysis":
-            self._send_json(404, {"error": "Rota não encontrada."}, origin)
+            self._send_json(404, {"error": "Route not found."}, origin)
             return
 
         if origin is None:
-            self._send_json(403, {"error": "A análise exige uma origem web autorizada."})
+            self._send_json(403, {"error": "Analysis requires an authorized web origin."})
             return
         if len(self.path) > 4096:
-            self._send_json(414, {"error": "A consulta excede o tamanho máximo permitido."}, origin)
+            self._send_json(414, {"error": "The query exceeds the maximum allowed size."}, origin)
             return
 
         try:
             parsed = parse_qs(path.query, keep_blank_values=True, max_num_fields=8, strict_parsing=True)
             if any(len(values) != 1 for values in parsed.values()):
-                raise ValueError("Parâmetros repetidos não são aceitos.")
+                raise ValueError("Repeated parameters are not accepted.")
             allowed_params = {"latitude", "longitude", "altitude_m", "start", "end", "step"}
             unexpected = set(parsed) - allowed_params
             if unexpected:
-                raise ValueError("Parâmetros desconhecidos: " + ", ".join(sorted(unexpected)))
+                raise ValueError("Unknown parameters: " + ", ".join(sorted(unexpected)))
             params = {key: values[0] for key, values in parsed.items()}
         except ValueError as error:
             self._send_json(400, {"error": str(error)}, origin)
             return
 
         if not ANALYSIS_SLOTS.acquire(blocking=False):
-            self._send_json(503, {"error": "O serviço está ocupado. Tente novamente em alguns segundos."}, origin, {"Retry-After": "2"})
+            self._send_json(503, {"error": "The service is busy. Try again in a few seconds."}, origin, {"Retry-After": "2"})
             return
         try:
             try:
@@ -135,8 +135,8 @@ class APIHandler(BaseHTTPRequestHandler):
         except SpiceUnavailable as error:
             self._send_json(503, {"error": str(error)}, origin)
         except Exception as error:
-            print(f"Erro de cálculo SPICE: {error}", file=sys.stderr)
-            self._send_json(502, {"error": "O cálculo SPICE falhou para o período e as coordenadas informados."}, origin)
+            print(f"SPICE calculation error: {error}", file=sys.stderr)
+            self._send_json(502, {"error": "SPICE calculation failed for the requested time period and coordinates."}, origin)
         else:
             self._send_json(200, result, origin)
 
@@ -149,12 +149,12 @@ class APIHandler(BaseHTTPRequestHandler):
 def main() -> None:
     try:
         ensure_kernels_loaded()
-        print("Kernels SPICE carregados (DE440s + referencial lunar MOON_ME).")
+        print("SPICE kernels loaded (DE440s + MOON_ME lunar frame).")
     except SpiceUnavailable as error:
-        print(f"Aviso: {error}", file=sys.stderr)
+        print(f"Warning: {error}", file=sys.stderr)
     server = ThreadingHTTPServer((HOST, PORT), APIHandler)
-    print(f"Overhaul API escutando em http://{HOST}:{PORT}")
-    print("Pressione Ctrl+C para encerrar.")
+    print(f"Overhaul API listening on http://{HOST}:{PORT}")
+    print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

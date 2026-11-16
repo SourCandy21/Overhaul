@@ -19,23 +19,23 @@ if (-not $pythonExe) {
     }
 }
 if (-not $pythonExe) {
-    throw 'Python 3.10+ não foi encontrado. Instale o Python e habilite o comando python no PATH.'
+    throw 'Python 3.10+ was not found. Install Python and enable the python command in PATH.'
 }
 
 $backendDir = $PSScriptRoot
 $venvPython = Join-Path $backendDir '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venvPython)) {
     & $pythonExe -m venv (Join-Path $backendDir '.venv')
-    if ($LASTEXITCODE -ne 0) { throw 'Não foi possível criar o ambiente virtual Python.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create the Python virtual environment.' }
 }
 
 $spicePackage = Join-Path $backendDir '.venv\Lib\site-packages\spiceypy'
 if (-not (Test-Path -LiteralPath $spicePackage)) {
     & $venvPython -m pip install -r (Join-Path $backendDir 'requirements.txt')
-    if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar as dependências do backend.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to install backend dependencies.' }
 }
 
 & $venvPython (Join-Path $backendDir 'download_kernels.py')
-if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar os kernels SPICE.' }
+if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare SPICE kernels.' }
 
 & $venvPython (Join-Path $backendDir 'server.py')

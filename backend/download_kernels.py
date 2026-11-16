@@ -25,7 +25,7 @@ def download(url: str, destination: Path) -> None:
             raise RuntimeError(f"Arquivo baixado muito pequeno: {destination.name}")
         digest = sha256(temporary.read_bytes()).hexdigest()
         if digest != KERNEL_SHA256[destination.name]:
-            raise RuntimeError(f"SHA-256 inválido para {destination.name}; arquivo não será instalado.")
+            raise RuntimeError(f"Invalid SHA-256 for {destination.name}; file will not be installed.")
         temporary.replace(destination)
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -40,12 +40,12 @@ def main() -> int:
             if sha256(destination.read_bytes()).hexdigest() == KERNEL_SHA256[name]:
                 print(f"Integridade confirmada: {name}")
                 continue
-            print(f"Arquivo existente inválido; baixando novamente: {name}")
+            print(f"Existing file is invalid; downloading again: {name}")
         print(f"Baixando {name}…")
         try:
             download(url, destination)
         except Exception as error:
-            print(f"Falha ao baixar {name}: {error}", file=sys.stderr)
+            print(f"Download failed for {name}: {error}", file=sys.stderr)
             return 1
     print(f"Kernels preparados em: {KERNEL_DIR}")
     return 0
